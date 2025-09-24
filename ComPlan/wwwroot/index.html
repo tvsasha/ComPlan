@@ -1,0 +1,325 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<title>ComPlan: Пользователи</title>
+<style>
+body {
+    font-family: 'Inter', sans-serif;
+    background: linear-gradient(135deg, #74ebd5, #ACB6E5);
+    margin:0; padding:0; min-height:100vh;
+    display:flex; flex-direction:column; align-items:center; justify-content:flex-start;
+    padding-top:50px;
+}
+h1 { text-align:center; color:#333; margin-bottom:25px; }
+
+.card {
+    background:#fff; border-radius:16px; box-shadow:0 6px 18px rgba(0,0,0,0.12);
+    padding:30px 40px; width:350px; position:relative;
+}
+.card h2 { margin:15px 0 10px; font-size:1.2rem; color:#444; text-align:center; }
+
+input, select { width:100%; padding:10px; margin:8px 0; border:1px solid #ccc; border-radius:8px; font-size:0.95rem; }
+button { border:none; border-radius:8px; font-weight:600; cursor:pointer; font-size:0.95rem; transition:0.2s; }
+button:hover { opacity:0.9; }
+
+.login-btn { width:100%; padding:10px; background:#4A90E2; color:#fff; margin-top:10px; }
+.reg-btn { width:100%; padding:10px; background:#50C878; color:#fff; margin-top:10px; }
+.action-btn { width:auto; padding:12px 25px; background:#50C878; color:#fff; margin-top:0; }
+.cancel-btn { background:#FF6B6B; color:#fff; width:auto; padding:12px 25px; margin-top:0; }
+
+.switch-link { text-align:center; margin-top:10px; font-size:0.9rem; }
+.switch-link a { color:#4A90E2; cursor:pointer; text-decoration:none; }
+
+#userControls {
+    width: 90%; max-width: 1000px; display:none;
+    justify-content:center; align-items:center; gap:15px; margin-top:20px;
+}
+
+#usersList {
+    display:none; flex-wrap:wrap; justify-content:center; gap:20px; list-style:none; padding:0; margin-top:20px; width:90%; max-width:1000px;
+}
+.user-card { background:#fff; border-radius:15px; box-shadow:0 8px 20px rgba(0,0,0,0.15); padding:20px; width:220px; text-align:center; position:relative; cursor:pointer; }
+.user-name { font-size:1.2rem; font-weight:600; margin-bottom:10px; }
+.role-name { font-size:1rem; color:#777; background:#f0f0f0; padding:5px 10px; border-radius:12px; }
+
+.context-menu {
+    position:absolute; background:#fff; border-radius:8px; box-shadow:0 4px 12px rgba(0,0,0,0.15);
+    display:none; z-index:1000; min-width:120px;
+}
+.context-menu button { width:100%; border:none; background:none; padding:10px; text-align:left; cursor:pointer; font-size:0.95rem; }
+.context-menu button:hover { background:#f0f0f0; }
+
+#editCard { position:fixed; top:50%; left:50%; transform:translate(-50%, -50%); z-index:1001; display:none; }
+.overlay { position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.3); z-index:1000; display:none; }
+</style>
+</head>
+<body>
+<h1>ComPlan</h1>
+
+<!-- Аутентификация -->
+<div id="authBlock" class="card">
+    <div id="loginForm">
+        <h2>Вход</h2>
+        <input id="loginEmail" placeholder="Email">
+        <input id="loginPass" type="password" placeholder="Пароль">
+        <button id="loginBtn" class="login-btn">Войти</button>
+        <p id="loginError" style="color:red;"></p>
+        <div class="switch-link">
+            Нет аккаунта? <a id="toRegister">Зарегистрироваться</a>
+        </div>
+    </div>
+
+    <div id="registerForm" style="display:none;">
+        <h2>Регистрация</h2>
+        <input id="regUser" placeholder="Имя пользователя">
+        <input id="regEmail" placeholder="Email">
+        <input id="regPass" type="password" placeholder="Пароль">
+        <select id="regRole"></select>
+        <button id="regBtn" class="reg-btn">Зарегистрироваться</button>
+        <p id="regError" style="color:red;"></p>
+        <div class="switch-link">
+            Уже есть аккаунт? <a id="toLogin">Войти</a>
+        </div>
+    </div>
+</div>
+
+<!-- Панель управления -->
+<div id="userControls">
+    <button id="logoutBtn" class="action-btn">Выйти</button>
+    <button id="createBtn" class="action-btn">Создать пользователя</button>
+</div>
+
+<ul id="usersList"></ul>
+
+<!-- Контекстное меню -->
+<div id="contextMenu" class="context-menu">
+    <button id="editUserBtn">Редактировать</button>
+    <button id="deleteUserBtn">Удалить</button>
+</div>
+
+<!-- Всплывающее окно редактирования/создания -->
+<div class="overlay" id="overlay"></div>
+<div class="card" id="editCard">
+    <h2 id="editTitle">Создать пользователя</h2>
+    <input id="editUserName" placeholder="Имя пользователя">
+    <input id="editUserEmail" placeholder="Email">
+    <input id="editUserPass" type="password" placeholder="Пароль">
+    <select id="editUserRole"></select>
+    <button id="saveUserBtn" class="action-btn">Сохранить</button>
+    <button id="cancelEditBtn" class="cancel-btn">Отмена</button>
+    <p id="editError" style="color:red;"></p>
+</div>
+
+<script>
+const apiUrl = "http://localhost:5150/api";
+let currentUser = null;
+let users = [];
+let selectedUser = null;
+let menuTarget = null;
+
+const authBlock = document.getElementById("authBlock");
+const userControls = document.getElementById("userControls");
+const usersList = document.getElementById("usersList");
+const overlay = document.getElementById("overlay");
+const editCard = document.getElementById("editCard");
+const contextMenu = document.getElementById("contextMenu");
+
+// Переключение форм
+document.getElementById("toRegister").addEventListener("click", () => {
+    document.getElementById("loginForm").style.display = "none";
+    document.getElementById("registerForm").style.display = "block";
+});
+document.getElementById("toLogin").addEventListener("click", () => {
+    document.getElementById("registerForm").style.display = "none";
+    document.getElementById("loginForm").style.display = "block";
+});
+
+// Загрузка ролей
+async function loadRoles(selectId) {
+    try {
+        const res = await fetch(`${apiUrl}/roles`);
+        const roles = await res.json();
+        const select = document.getElementById(selectId);
+        select.innerHTML = "";
+        roles.forEach(r => {
+            const option = document.createElement("option");
+            option.value = r.roleId;
+            option.textContent = r.roleName;
+            select.appendChild(option);
+        });
+    } catch (err) {
+        console.error("Ошибка загрузки ролей", err);
+    }
+}
+
+// Вход
+document.getElementById("loginBtn").addEventListener("click", async () => {
+    const email = document.getElementById("loginEmail").value;
+    const password = document.getElementById("loginPass").value;
+    const res = await fetch(`${apiUrl}/auth/login`, {
+        method:"POST",
+        headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({ email, password })
+    });
+    const data = await res.json();
+    if(res.ok){
+        currentUser = data;
+        authBlock.style.display="none";
+        userControls.style.display="flex";
+        usersList.style.display="flex";
+        await loadRoles("editUserRole");
+        loadUsers();
+    } else {
+        document.getElementById("loginError").textContent = data.message || "Ошибка входа";
+    }
+});
+
+// Регистрация
+document.getElementById("regBtn").addEventListener("click", async () => {
+    const userName = document.getElementById("regUser").value;
+    const email = document.getElementById("regEmail").value;
+    const password = document.getElementById("regPass").value;
+    const roleId = parseInt(document.getElementById("regRole").value);
+    if(!userName || !email || !password) { document.getElementById("regError").textContent="Заполните все поля"; return; }
+    const res = await fetch(`${apiUrl}/auth/register`, {
+        method:"POST",
+        headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({ userName, email, password, roleId })
+    });
+    const data = await res.json();
+    if(res.ok){
+        document.getElementById("regError").textContent="";
+        document.getElementById("toLogin").click();
+    } else {
+        document.getElementById("regError").textContent = data.message || "Ошибка регистрации";
+    }
+});
+
+// Выход
+document.getElementById("logoutBtn").addEventListener("click", () => {
+    currentUser = null;
+    authBlock.style.display="block";
+    userControls.style.display="none";
+    usersList.style.display="none";
+    document.getElementById("loginForm").style.display="block";
+    document.getElementById("registerForm").style.display="none";
+});
+
+// Открытие карточки редактирования/создания
+document.getElementById("createBtn").addEventListener("click", () => openEditCard());
+function openEditCard(user=null){
+    selectedUser = user;
+    document.getElementById("editTitle").textContent = user?"Редактировать пользователя":"Создать пользователя";
+    document.getElementById("editUserName").value = user ? user.userName : "";
+    document.getElementById("editUserEmail").value = user ? user.email : "";
+    document.getElementById("editUserPass").value = "";
+    document.getElementById("editError").textContent = "";
+    editCard.style.display="block";
+    overlay.style.display="block";
+    if(!user) document.getElementById("editUserRole").selectedIndex = 0;
+    else document.getElementById("editUserRole").value = user.role?.roleId || user.roleId;
+}
+document.getElementById("cancelEditBtn").addEventListener("click", closeEditCard);
+overlay.addEventListener("click", closeEditCard);
+function closeEditCard(){ editCard.style.display="none"; overlay.style.display="none"; }
+
+// Сохранение пользователя
+document.getElementById("saveUserBtn").addEventListener("click", async () => {
+    const userName = document.getElementById("editUserName").value;
+    const email = document.getElementById("editUserEmail").value;
+    const password = document.getElementById("editUserPass").value;
+    const roleId = parseInt(document.getElementById("editUserRole").value);
+
+    if(!userName || !email) { document.getElementById("editError").textContent="Заполните все поля"; return; }
+
+    try{
+        if(selectedUser){
+            const body = { userName, email, roleId };
+            if(password) body.password = password;
+            await fetch(`${apiUrl}/users/${selectedUser.userId}`, {
+                method:"PUT",
+                headers:{"Content-Type":"application/json"},
+                body:JSON.stringify(body)
+            });
+        } else {
+            if(!password){ document.getElementById("editError").textContent="Введите пароль"; return; }
+            await fetch(`${apiUrl}/auth/register`, {
+                method:"POST",
+                headers:{"Content-Type":"application/json"},
+                body:JSON.stringify({ userName, email, password, roleId })
+            });
+        }
+        closeEditCard();
+        loadUsers();
+    } catch(err){
+        document.getElementById("editError").textContent = "Ошибка сохранения";
+        console.error(err);
+    }
+});
+
+// Загрузка пользователей
+async function loadUsers(){
+    try{
+        const res = await fetch(`${apiUrl}/users`);
+        users = await res.json();
+        usersList.innerHTML="";
+        users.forEach(u => {
+            const li = document.createElement("li");
+            li.className="user-card";
+            const roleName = u.role ? u.role.roleName : `Роль #${u.roleId}`;
+            li.innerHTML = `<div class="user-name">${u.userName}</div><div class="role-name">${roleName}</div>`;
+            li.dataset.userId = u.userId;
+            usersList.appendChild(li);
+
+            li.addEventListener("contextmenu", e => {
+                e.preventDefault();
+                menuTarget = u;
+                contextMenu.style.top = e.pageY + "px";
+                contextMenu.style.left = e.pageX + "px";
+                contextMenu.style.display = "block";
+            });
+        });
+        usersList.style.display = users.length?"flex":"none";
+    } catch(err){ 
+        console.error("Ошибка загрузки пользователей", err); 
+    }
+}
+
+// Контекстное меню
+document.addEventListener("click", () => { contextMenu.style.display="none"; });
+
+document.getElementById("editUserBtn").addEventListener("click", () => {
+    contextMenu.style.display="none";
+    openEditCard(menuTarget);
+});
+
+document.getElementById("deleteUserBtn").addEventListener("click", async () => {
+    contextMenu.style.display="none";
+    try {
+        await fetch(`${apiUrl}/users/${menuTarget.userId}`, { method:"DELETE" });
+        
+        if (menuTarget.userId === currentUser.userId) {
+            currentUser = null;
+            authBlock.style.display = "block";
+            userControls.style.display = "none";
+            usersList.style.display = "none";
+            usersList.innerHTML = ""; // очистка карточек
+            document.getElementById("loginForm").style.display = "block";
+            document.getElementById("registerForm").style.display = "none";
+            return; // не загружаем пользователей
+        }
+        
+        loadUsers();
+    } catch(err){ 
+        console.error(err); 
+    }
+});
+
+
+// Инициализация ролей
+loadRoles("regRole");
+loadRoles("editUserRole");
+</script>
+</body>
+</html>

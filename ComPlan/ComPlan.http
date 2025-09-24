@@ -1,0 +1,6 @@
+@ComPlan_HostAddress = http://localhost:5150
+
+GET {{ComPlan_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###
