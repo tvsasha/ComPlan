@@ -1,4 +1,4 @@
-const apiUrl = "http://ComPlan.somee.com/ComPlan/api";
+const apiUrl = "http://complan.somee.com/ComPlan/api";
 let currentUser = null;
 let users = [];
 let selectedUser = null;
@@ -12,7 +12,6 @@ const editCard = document.getElementById("editCard");
 const contextMenu = document.getElementById("contextMenu");
 const createBtn = document.getElementById("createBtn");
 
-// Переключение форм
 document.getElementById("toRegister").addEventListener("click", () => {
     document.getElementById("loginForm").style.display = "none";
     document.getElementById("registerForm").style.display = "block";
@@ -22,7 +21,6 @@ document.getElementById("toLogin").addEventListener("click", () => {
     document.getElementById("loginForm").style.display = "block";
 });
 
-// Загрузка ролей
 async function loadRoles(selectId) {
     try {
         const res = await fetch(`${apiUrl}/roles`);
@@ -40,7 +38,6 @@ async function loadRoles(selectId) {
     }
 }
 
-// Проверка сессии при загрузке страницы
 async function checkSession() {
     const token = localStorage.getItem("sessionToken");
     if (!token) return;
@@ -172,7 +169,6 @@ async function loadUsers() {
     }
 }
 
-// Контекстное меню
 document.addEventListener("click", () => {
     contextMenu.style.display = "none";
 });
@@ -206,7 +202,6 @@ document.getElementById("deleteUserBtn").addEventListener("click", async () => {
     }
 });
 
-// Открытие/закрытие формы редактирования
 function openEditCard(user = null) {
     selectedUser = user;
     document.getElementById("editTitle").textContent = user ? "Редактировать пользователя" : "Создать пользователя";
@@ -214,18 +209,25 @@ function openEditCard(user = null) {
     document.getElementById("editUserEmail").value = user ? user.email : "";
     document.getElementById("editUserPass").value = "";
     document.getElementById("editError").textContent = "";
+
+    const roleSelect = document.getElementById("editUserRole");
+    if (!user) {
+        roleSelect.selectedIndex = 0; 
+    } else {
+        roleSelect.value = user.role?.roleId || user.roleId;
+    }
+
     editCard.style.display = "block";
     overlay.style.display = "block";
-    document.getElementById("editUserRole").value = user ? (user.role?.roleId || user.roleId) : "";
 }
+
 document.getElementById("cancelEditBtn").addEventListener("click", closeEditCard);
 overlay.addEventListener("click", closeEditCard);
 function closeEditCard() {
     editCard.style.display = "none";
     overlay.style.display = "none";
 }
-
-// Сохранение пользователя
+createBtn.addEventListener("click", () => openEditCard(null));
 document.getElementById("saveUserBtn").addEventListener("click", async () => {
     const userName = document.getElementById("editUserName").value;
     const email = document.getElementById("editUserEmail").value;
@@ -261,7 +263,6 @@ document.getElementById("saveUserBtn").addEventListener("click", async () => {
     }
 });
 
-// Инициализация
 loadRoles("regRole");
 loadRoles("editUserRole");
 checkSession();

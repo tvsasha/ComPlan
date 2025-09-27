@@ -10,8 +10,6 @@ namespace ComPlan.Controllers
     {
         private readonly AppDbContext _context;
         public UsersController(AppDbContext context) => _context = context;
-
-        // DTO для безопасного обновления
         public class UpdateUserDto
         {
             public required string Email { get; set; }
@@ -85,8 +83,6 @@ namespace ComPlan.Controllers
             var currentUser = await ValidateSession(token);
             if (currentUser == null)
                 return Unauthorized(new { message = "Сессия недействительна" });
-
-            // Проверка: только администратор (RoleId == 1) может редактировать
             if (currentUser.RoleId != 1)
                 return Forbid("Только администратор может редактировать пользователей");
 
