@@ -6,7 +6,7 @@ public class DesignTimeDbContextFactory : IDesignTimeDbContextFactory<AppDbConte
     public AppDbContext CreateDbContext(string[] args)
     {
         var optionsBuilder = new DbContextOptionsBuilder<AppDbContext>();
-        optionsBuilder.UseSqlServer("Server=DESKTOP-GPL6FO9\\SQLEXPRESS;Database=ComPlanDb;Trusted_Connection=True;TrustServerCertificate=True;");
+        optionsBuilder.UseSqlServer("workstation id=ComPlanDb.mssql.somee.com;packet size=4096;user id=tivsas_SQLLogin_1;pwd=f9ca54zls2;data source=ComPlanDb.mssql.somee.com;persist security info=False;initial catalog=ComPlanDb;TrustServerCertificate=True");
 
         return new AppDbContext(optionsBuilder.Options);
     }
