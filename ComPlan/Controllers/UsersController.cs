@@ -11,20 +11,58 @@ namespace ComPlan.Controllers
         private readonly AppDbContext _context;
         public UsersController(AppDbContext context) => _context = context;
 
-        
-
         // DTO для безопасного обновления
         public class UpdateUserDto
         {
-            public required string Email { get; set; }  
+            public required string Email { get; set; }
             public string? UserName { get; set; }
             public int? RoleId { get; set; }
             public string? Password { get; set; }
         }
 
-        [HttpGet]
-        public async Task<IActionResult> GetUsers()
+        private async Task<User?> ValidateSession(string? authHeader)
         {
+            Console.WriteLine("Полученный Authorization: " + (authHeader ?? "отсутствует"));
+
+            if (string.IsNullOrEmpty(authHeader) || !authHeader.StartsWith("Bearer "))
+            {
+                Console.WriteLine("Заголовок некорректный или отсутствует");
+                return null;
+            }
+
+            var token = authHeader.Substring(7).Trim();
+
+            var user = await _context.Users
+                .Include(u => u.Role)
+                .FirstOrDefaultAsync(u => u.SessionToken == token);
+
+            if (user == null)
+            {
+                Console.WriteLine("Пользователь не найден по токену: " + token);
+                return null;
+            }
+
+            Console.WriteLine("SessionExpiresAt: " + user.SessionExpiresAt);
+            Console.WriteLine("Текущее время UTC: " + DateTime.UtcNow);
+
+            if (user.SessionExpiresAt == null || user.SessionExpiresAt < DateTime.UtcNow)
+            {
+                Console.WriteLine("Сессия истекла или ExpiresAt null");
+                return null;
+            }
+
+            return user;
+        }
+
+        [HttpGet]
+        public async Task<IActionResult> GetUsers([FromHeader(Name = "Authorization")] string? token)
+        {
+            var currentUser = await ValidateSession(token);
+            if (currentUser == null)
+            {
+                return Unauthorized(new { message = "Сессия недействительна" });
+            }
+
             var users = await _context.Users
                 .Include(u => u.Role)
                 .Select(u => new
@@ -33,20 +71,25 @@ namespace ComPlan.Controllers
                     u.UserName,
                     u.Email,
                     u.RoleId,
-                    Role = new { u.Role.RoleId, u.Role.RoleName }, // вернуть объект Role
-                    u.SessionToken,
-                    u.SessionExpiresAt
+                    Role = new { u.Role.RoleId, u.Role.RoleName }
                 })
                 .ToListAsync();
 
+            Console.WriteLine("Возвращено пользователей: " + users.Count);
             return Ok(users);
         }
 
-
-
         [HttpPut("{id}")]
-        public async Task<IActionResult> UpdateUser(int id, [FromBody] UpdateUserDto dto)
+        public async Task<IActionResult> UpdateUser(int id, [FromHeader(Name = "Authorization")] string? token, [FromBody] UpdateUserDto dto)
         {
+            var currentUser = await ValidateSession(token);
+            if (currentUser == null)
+                return Unauthorized(new { message = "Сессия недействительна" });
+
+            // Проверка: только администратор (RoleId == 1) может редактировать
+            if (currentUser.RoleId != 1)
+                return Forbid("Только администратор может редактировать пользователей");
+
             if (dto == null) return BadRequest(new { message = "Нет данных для обновления" });
 
             var user = await _context.Users.FindAsync(id);
@@ -82,7 +125,6 @@ namespace ComPlan.Controllers
                 var newRoleId = dto.RoleId.Value;
                 if (user.RoleId != newRoleId)
                 {
-                    // проверяем что роль существует
                     var roleExists = await _context.Roles.AnyAsync(r => r.RoleId == newRoleId);
                     if (!roleExists)
                         return BadRequest(new { message = "Роль не найдена" });
@@ -94,8 +136,7 @@ namespace ComPlan.Controllers
 
             if (!string.IsNullOrWhiteSpace(dto.Password))
             {
-                // ⚠️ Пароль всё ещё хранится в plain-text
-                user.Password = dto.Password;
+                user.Password = AuthController.HashPassword(dto.Password);
                 changed = true;
             }
 
@@ -112,12 +153,17 @@ namespace ComPlan.Controllers
         }
 
         [HttpDelete("{id}")]
-        public async Task<IActionResult> DeleteUser(int id)
+        public async Task<IActionResult> DeleteUser(int id, [FromHeader(Name = "Authorization")] string? token)
         {
+            var currentUser = await ValidateSession(token);
+            if (currentUser == null)
+                return Unauthorized(new { message = "Сессия недействительна" });
+            if (currentUser.RoleId != 1)
+                return Forbid("Только администратор может удалять пользователей");
+
             var user = await _context.Users.FindAsync(id);
             if (user == null) return NotFound(new { message = "Пользователь не найден" });
 
-            // ❌ Сбрасываем сессию перед удалением
             user.SessionToken = null;
             user.SessionExpiresAt = null;
 

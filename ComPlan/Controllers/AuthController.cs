@@ -19,7 +19,7 @@ namespace ComPlan.Controllers
         }
 
         // 🔹 Хэширование пароля
-        private static string HashPassword(string password)
+        public static string HashPassword(string password)
         {
             using var sha256 = SHA256.Create();
             var bytes = Encoding.UTF8.GetBytes(password);
@@ -56,6 +56,7 @@ namespace ComPlan.Controllers
         }
 
         // 📌 Логин
+        // 📌 Логин
         [HttpPost("login")]
         public async Task<IActionResult> Login([FromBody] LoginDto dto)
         {
@@ -68,14 +69,22 @@ namespace ComPlan.Controllers
             if (user == null || user.Password != HashPassword(dto.Password))
                 return Unauthorized(new { message = "Неверный Email или пароль" });
 
+            user.SessionToken = Guid.NewGuid().ToString();
+            user.SessionExpiresAt = DateTime.UtcNow.AddHours(1);
+
+            await _context.SaveChangesAsync();
+
             return Ok(new
             {
                 userId = user.UserId,
                 userName = user.UserName,
                 email = user.Email,
-                role = new { user.Role.RoleId, user.Role.RoleName }
+                role = new { user.Role.RoleId, user.Role.RoleName },
+                sessionToken = user.SessionToken,
+                sessionExpiresAt = user.SessionExpiresAt
             });
         }
+
 
         // 📌 Logout (удаляет сессию)
         [HttpPost("logout/{userId}")]
